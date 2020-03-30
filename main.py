@@ -3,6 +3,7 @@ import machine
 import ubinascii
 import time
 import dht
+import onewire, ds18x20
 import ujson
 import sys
 
@@ -11,6 +12,7 @@ config = {
 "broker" : "192.168.2.25",
 "topic" : "default_topic",
 "dht" : False,
+"ds1820" : False,
 "analog_period" : 0,
 "debug" : False
 }
@@ -107,10 +109,13 @@ def main_loop():
     client.subscribe(config["topic"]+'/dimmer/+/command', 1)
 
     #create dht if it is enabled in config
-    if config["dht"] == True:
-        d = dht.DHT22(machine.Pin(0))
+    if config["dht"]:
+        temp_sensor = dht.DHT22(machine.Pin(0))
+    elif config["ds1820"]:
+		temp_sensor = ds18x20.DS18X20(onewire.OneWire(machine.Pin(0)))
+		rom_id = ds_sensor.scan()[0]
     else:
-        d = None
+        temp_sensor = None
 
     #check in config for analog period
     analog_period = config['analog_period']
@@ -143,9 +148,9 @@ def main_loop():
                 time_tmp = cur_time
 
                 #tempeature is read from dht periodically
-                if d != None and (cur_time % 60) == dht_retry :
+                if config["dht"] and (cur_time % 60) == dht_retry :
                     try:
-                        d.measure()
+                        temp_sensor.measure()
                     except (OSError, dht.DHTChecsumError) as excp:
                         #If we have an exception, retry in 4 seconds
                         dht_retry +=4
@@ -161,13 +166,20 @@ def main_loop():
                         dht_retry = 0
                         dht_err_ctr = 0
                         #all went well let's publish temperature
-                        client.publish(sensor_temp_str, str(d.temperature()))
-                        print(d.temperature())
+                        client.publish(sensor_temp_str, str(temp_sensor.temperature()))
+                        print(temp_sensor.temperature())
 
                         #publish humidity
                         if (cur_time % (60*30)) == dht_retry:
-                            client.publish(sensor_humid_str, str(d.humidity()))
-
+                            client.publish(sensor_humid_str, str(temp_sensor.humidity()))
+				elif config["ds1820"] and (cur_time % 60) == 0:
+					temp_sensor.convert_temp()
+				elif config["ds1820"] and (cur_time % 60) == 1:
+					temp = temp_sensor.read_temp(rom_id)
+					#all went well let's publish temperature
+					client.publish(sensor_temp_str, str(temp))
+					print(temp)
+					
                 #analog publication period is user defined
                 if analog_period and (cur_time % analog_period) == 0:
                     adc.read()
