@@ -20,6 +20,8 @@ class Callback(object):
         self.pwm = pwm
 
     def set_dimmer(self, topic, msg):
+        #topic is dimmer/{channel}/command
+
         # we get bytes, convert to unicode str
         msg=msg.decode("utf-8")
         index = topic.rfind(b"/command")
@@ -28,10 +30,11 @@ class Callback(object):
             return
         channel = topic[index-1:index]
         if channel == b'g':
-            for chan, val in enumerate(msg.split(";")):
-                self.pwm[chan].duty(int(val))
+            #if channel is "g" we have 3 values separated by comma
+            for chan, val in enumerate(msg.split(",")):
+                self.pwm[chan].duty(int(float(val)*1023/255))
         else:
-            self.pwm[int(channel)].duty(int(msg))
+            self.pwm[int(channel)].duty(int(float(msg)*1023/100))
 
 class ButtonPwm(object):
 
@@ -59,7 +62,7 @@ class ButtonPwm(object):
                 if self.pwm.duty() == 0 or self.pwm.duty() == 1023 :
                     self.delta = -self.delta
                 print(self.pwm.duty(), self.delta)
-                self.mqtt.publish(ButtonPwm.dim_state_str.format(config['topic'], self.channel), str(self.pwm.duty()) )
+                self.mqtt.publish(ButtonPwm.dim_state_str.format(config['topic'], self.channel), str(int(self.pwm.duty()/1023*100)) )
             else:
                 self.time_cnt += 1
         elif 0 < self.time_cnt <= 10:
@@ -68,7 +71,7 @@ class ButtonPwm(object):
             else:
                 self.last_value = self.pwm.duty()
                 self.pwm.duty(0)
-            self.mqtt.publish(ButtonPwm.dim_state_str.format(config['topic'], self.channel), str(self.pwm.duty()) )
+            self.mqtt.publish(ButtonPwm.dim_state_str.format(config['topic'], self.channel), str(int(self.pwm.duty()/1023*100)) )
             self.time_cnt = 0
         else:
             self.time_cnt = 0
@@ -95,7 +98,7 @@ def main_loop():
     cb = Callback(pwm)
 
 
-    robust.MQTTClient.DEBUG = True
+    #~ robust.MQTTClient.DEBUG = True
 
     #create the mqtt client using config parameters
     client = robust.MQTTClient(config["client_id"], config["broker"])
@@ -166,7 +169,7 @@ def main_loop():
                             client.publish(sensor_humid_str, str(d.humidity()))
 
                 #analog publication period is user defined
-                if analog_period and (cur_time % analog_period):
+                if analog_period and (cur_time % analog_period) == 0:
                     adc.read()
                     client.publish("{}/sensor/analog".format(config['topic']), str(adc.read()/1023.0) )
 
