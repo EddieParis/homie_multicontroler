@@ -5,6 +5,7 @@ import time
 
 VERSION = "3.0"
 
+TIME_SEND_INTERVAL = 50*1000
 log = True
 
 def publish(mqtt, topic, value):
@@ -25,25 +26,25 @@ class HomieDevice:
 
     def __init__(self, mqtt, device_id, nodes, nice_device_name):
         self.nodes = nodes
-
+        self.nice_device_name = nice_device_name
         self.mqtt = mqtt
-
         self.mqtt.set_callback(self.subscribe_cb)
 
-        base_list = [ self.base, device_id.decode("ascii"), "" ]
+        base_list = [self.base, device_id.decode("ascii"), "" ]
 
         base_list[-1] = "$homie"
-        publish( self.mqtt, base_list, VERSION)
+        publish(self.mqtt, base_list, VERSION)
 
         base_list[-1] = "$name"
-        publish( self.mqtt, base_list, nice_device_name)
+        self.name_topic = publish(self.mqtt, base_list, nice_device_name)
+        self.last_name_sent = time.ticks_ms()
 
         base_list[-1] = "$state"
-        state_topic = publish( self.mqtt, base_list, "init")
+        state_topic = publish(self.mqtt, base_list, "init")
         self.mqtt.set_last_will(state_topic, "lost", True, 1)
 
         base_list[-1] = "$nodes"
-        publish( self.mqtt, base_list, ",".join([node.node_id for node in self.nodes]))
+        publish(self.mqtt, base_list, ",".join([node.node_id for node in self.nodes]))
 
         for node in nodes:
             node.publish(self.mqtt, list(base_list))
@@ -67,6 +68,10 @@ class HomieDevice:
         while len(publish_wait_queue):
             prop, value = publish_wait_queue.pop()
             prop.send_value(value)
+        now = time.ticks_ms()
+        if time.ticks_diff(now, self.last_name_sent) > TIME_SEND_INTERVAL:
+            publish(self.mqtt, self.name_topic, self.nice_device_name)
+            self.last_name_sent = now
 
 
 class Node:
