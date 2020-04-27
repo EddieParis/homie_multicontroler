@@ -1,16 +1,3 @@
-  # ~ homie / device123 / $homie → 3.0
-  # ~ homie / device123 / $name → My device
-  # ~ homie / device123 / $state → ready
-  # ~ homie / device123 / $nodes → mythermostat
-
-  # ~ homie / device123 / mythermostat / $name → My thermostat
-  # ~ homie / device123 / mythermostat / $properties → temperature
-
-  # ~ homie / device123 / mythermostat / temperature → 22
-  # ~ homie / device123 / mythermostat / temperature / $name → Temperature
-  # ~ homie / device123 / mythermostat / temperature / $unit → °C
-  # ~ homie / device123 / mythermostat / temperature / $datatype → integer
-  # ~ homie / device123 / mythermostat / temperature / $settable → true
 import robust
 import machine
 import ubinascii
@@ -18,24 +5,28 @@ import time
 
 VERSION = "3.0"
 
-MQTT_ID = b"esp32_"+ ubinascii.hexlify(machine.unique_id())
-
 log = True
 
 def publish(mqtt, topic, value):
-    joint_topic = "/".join(topic)
+    if isinstance(topic, list):
+        joint_topic = "/".join(topic)
+    else:
+        joint_topic = topic
     if log:
         print(joint_topic, value)
     mqtt.publish(joint_topic, value, True, 1)
+    return joint_topic
+
+
+publish_wait_queue = []
 
 class HomieDevice:
     base = "homie"
 
-    def __init__(self, device_id, nodes, nice_device_name):
+    def __init__(self, mqtt, device_id, nodes, nice_device_name):
         self.nodes = nodes
 
-        self.mqtt = robust.MQTTClient(MQTT_ID, "192.168.2.42")
-        self.mqtt.connect()
+        self.mqtt = mqtt
 
         self.mqtt.set_callback(self.subscribe_cb)
 
@@ -48,8 +39,8 @@ class HomieDevice:
         publish( self.mqtt, base_list, nice_device_name)
 
         base_list[-1] = "$state"
-        publish( self.mqtt, base_list, "ready")
-        self.mqtt.set_last_will("/".join(base_list), "lost", True, 1)
+        state_topic = publish( self.mqtt, base_list, "init")
+        self.mqtt.set_last_will(state_topic, "lost", True, 1)
 
         base_list[-1] = "$nodes"
         publish( self.mqtt, base_list, ",".join([node.node_id for node in self.nodes]))
@@ -57,8 +48,9 @@ class HomieDevice:
         for node in nodes:
             node.publish(self.mqtt, list(base_list))
 
+        publish(self.mqtt, state_topic, "ready")
+
     def subscribe_cb(self, topic, content):
-        print ("got message", topic, content)
         topic_split = topic.decode("ascii").split("/")
         value = content.decode("utf-8")
         node_iter = iter(self.nodes)
@@ -69,6 +61,13 @@ class HomieDevice:
             except StopIteration:
                 return False
             found = node.action_set(topic_split, value)
+
+    def main(self):
+        self.mqtt.check_msg()
+        while len(publish_wait_queue):
+            prop, value = publish_wait_queue.pop()
+            prop.send_value(value)
+
 
 class Node:
     def __init__(self, node_id, name, properties):
@@ -104,22 +103,22 @@ class Node:
             return False
 
 class Property:
-    def __init__(self, property_id, name, type, unit, format, init_value, set_value_cb=None):
+    def __init__(self, property_id, name, type, unit, format, init_value, value_set_cb=None):
+    # ~ def __init__(self, property_id, name, type, unit, format, init_value, retained, value_set_cb=None):
         self.property_id = property_id
         self.name = name
         self.type = type
         self.unit = unit
         self.format = format
         self.init_value = str(init_value)
-        self.set_value_cb = set_value_cb
+        # ~ self.retained = retained
+        self.value_set_cb = value_set_cb
 
     def publish(self, mqtt, base_list):
         self.mqtt = mqtt
 
         base_list[-1] = self.property_id
-        self.value_topic = "/".join(base_list)
-        self.mqtt.publish(self.value_topic, self.init_value, True, 1)
-        print (self.value_topic , self.init_value)
+        self.value_topic = publish(self.mqtt, base_list, self.init_value)
 
         base_list.append("$name")
         publish( self.mqtt, base_list, self.name)
@@ -135,18 +134,23 @@ class Property:
             base_list[-1] = "$format"
             publish( self.mqtt, base_list, self.format)
 
-        if self.set_value_cb:
+        # ~ if self.retained:
+            # ~ base_list[-1] = "$retained"
+            # ~ publish( self.mqtt, base_list, True)
+
+        if self.value_set_cb:
             base_list[-1] = "$settable"
             publish( self.mqtt, base_list, "true")
             base_list[-1] = "set"
             self.mqtt.subscribe("/".join(base_list), 1)
 
-    def set_value(self, value):
-        self.mqtt.publish( self.value_topic, value, True, 1)
+    def send_value(self, value):
+        publish(self.mqtt, self.value_topic, value)
 
     def call_cb(self, topic_split, value):
         if topic_split[3] == self.property_id:
-            self.set_value_cb(topic_split, value)
+            if self.value_set_cb(topic_split, value):
+                publish_wait_queue.append((self, value))
             return True
         else:
             return False
@@ -154,11 +158,18 @@ class Property:
 def my_cb(topic_split, value):
     print ("custom cb", topic_split[-1], value)
 
-props_color = [ Property("color", "desired color RGB", "color", None, "rgb", "0,0,0", my_cb) ]
-dim_props = [ Property("chan_a", "Dimmer A", "integer", "%", "0:100", 0, my_cb), Property("chan_b", "Dimmer B", "integer", "%", "0:100", 0, my_cb), Property("chan_c", "Dimmer C", "integer", "%", "0:100", 0, my_cb), Property("chan_d", "Dimmer D", "integer", "%", "0:100", 0, my_cb) ]
-nodes = [ Node("color", "Color leds (on ABC)", props_color), Node("dimmer", "Dimmers channels", dim_props) ]
-device = HomieDevice( ubinascii.hexlify(machine.unique_id()), nodes, "Multicontroler")
+if __name__ == "__main__":
+    MQTT_ID = b"esp32_"+ ubinascii.hexlify(machine.unique_id())
 
-while(True):
-    device.mqtt.check_msg()
-    time.sleep(.050)
+    mqtt = robust.MQTTClient(MQTT_ID, "192.168.2.42")
+    mqtt.connect()
+
+    props_color = [ Property("color", "desired color RGB", "color", None, "rgb", "0,0,0", my_cb) ]
+    dim_props = [ Property("chan-a", "Dimmer A", "float", None, "0:100", 0, my_cb), Property("chan-b", "Dimmer B", "integer", "%", "0:100", 0, my_cb), Property("chan-c", "Dimmer C", "integer", "%", "0:100", 0, my_cb), Property("chan-d", "Dimmer D", "integer", "%", "0:100", 0, my_cb) ]
+    env_props = [ Property("temperature", "Temperature", "float", "°C".encode("utf-8"), None, 0), Property("humidity", "Humidity", "float", "%", "0:100", 0), Property("pressure", "Atmospheric pressure", "float", "mBar", None, 0) ]
+    nodes = [ Node("color", "Color leds (on ABC)", props_color), Node("dimmer", "Dimmers channels", dim_props), Node("evironment", "Environment Measures", env_props) ]
+    device = HomieDevice( mqtt, ubinascii.hexlify(machine.unique_id()), nodes, "Multicontroler")
+
+    while(True):
+        device.mqtt.check_msg()
+        time.sleep(.050)

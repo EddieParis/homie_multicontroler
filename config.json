@@ -1,8 +1,10 @@
 {
+"esp32" : false,
 "broker" : "",
-"topic" : "",
-"dht" : true,
+"location" : "",
+"dht" : false,
 "ds1820" : false,
+"bme280": true,
 "analog_period" : 0,
 "debug" : false
 }

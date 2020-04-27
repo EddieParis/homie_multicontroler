@@ -6,45 +6,50 @@ import dht
 import onewire, ds18x20
 import ujson
 import sys
+import network
+import math
+
+import homie
 
 config = {
-"client_id" : b"esp8266_" + ubinascii.hexlify(machine.unique_id()),
+"esp32" : False,
+"client_id" : b"esp_" + ubinascii.hexlify(network.WLAN().config('mac')),
 "broker" : "192.168.2.25",
-"topic" : "default_topic",
+"location" : "",
 "dht" : False,
 "ds1820" : False,
+"bme280" : False,
 "analog_period" : 0,
 "debug" : False
 }
 
-class Callback(object):
-    def __init__(self, pwm):
-        self.pwm = pwm
+class ColorManager:
+    def __init__(self, pwms):
+        self.pwms = pwms
+        self.cycle = 0
+        self.angles = [0,0,0]
+        self.increments = [math.pi/180, math.pi/260, math.pi/225]
 
-    def set_dimmer(self, topic, msg):
-        #topic is dimmer/{channel}/command
+    def set_value(self, topic, value):
+        for pwm, val in zip(self.pwms, value.split(",")):
+            pwm.duty(int(float(val)*1023/255))
+        return True
 
-        # we get bytes, convert to unicode str
-        msg=msg.decode("utf-8")
-        index = topic.rfind(b"/command")
-        # if command can't be found, this is a bad topic
-        if index == -1:
-            return
-        channel = topic[index-1:index]
-        if channel == b'g':
-            #if channel is "g" we have 3 values separated by comma
-            for chan, val in enumerate(msg.split(",")):
-                self.pwm[chan].duty(int(float(val)*1023/255))
-        else:
-            self.pwm[int(channel)].duty(int(float(msg)*1023/100))
+    def do_cycle(self):
+        if self.cycle:
+            for angle, pwm in zip(self.angles, self.pwms):
+                pwm.duty(int(511*math.cos(angle)+511))
+            self.angles = [ (angle + inc)%(math.pi*2) for angle, inc in zip(self.angles, self.increments) ]
+
+    def set_cycler(self, topic, value):
+        self.cycle = int(value)
+        return True
+
 
 class ButtonPwm(object):
 
-    dim_state_str = "{}/dimmer/{}/state"
-
-    def __init__(self, mqtt_client, channel, pwm, bt_pin):
-        self.mqtt = mqtt_client
-        self.channel = channel
+    def __init__(self, pwm, bt_pin):
+        self.property = None
         self.pwm = pwm
         self.button = machine.Pin(bt_pin, machine.Pin.IN, machine.Pin.PULL_UP)
         self.time_cnt = 0
@@ -64,7 +69,7 @@ class ButtonPwm(object):
                 if self.pwm.duty() == 0 or self.pwm.duty() == 1023 :
                     self.delta = -self.delta
                 print(self.pwm.duty(), self.delta)
-                self.mqtt.publish(ButtonPwm.dim_state_str.format(config['topic'], self.channel), str(int(self.pwm.duty()/1023*100)) )
+                self.property.send_value(str(self.pwm.duty()/1023))
             else:
                 self.time_cnt += 1
         elif 0 < self.time_cnt <= 10:
@@ -73,10 +78,14 @@ class ButtonPwm(object):
             else:
                 self.last_value = self.pwm.duty()
                 self.pwm.duty(0)
-            self.mqtt.publish(ButtonPwm.dim_state_str.format(config['topic'], self.channel), str(int(self.pwm.duty()/1023*100)) )
+            self.property.send_value(str(self.pwm.duty()/1023))
             self.time_cnt = 0
         else:
             self.time_cnt = 0
+
+    def set_value(self, topic, value):
+        self.pwm.duty(int(float(value)*1023))
+        return True
 
 def main_loop():
 
@@ -86,27 +95,22 @@ def main_loop():
     except OSError:
         pass
 
-
-    sensor_temp_str = config['topic'] + "/sensor/temperature"
-    sensor_humid_str = config['topic'] + "/sensor/humidity"
-
     #create the pwm channels
     pwm0 = machine.PWM(machine.Pin(12), duty=0, freq=150)
     pwm1 = machine.PWM(machine.Pin(13), duty=0)
-    pwm2 = machine.PWM(machine.Pin(15), duty=0)
+    if config["esp32"]:
+        pwm2 = machine.PWM(machine.Pin(2), duty=0)
+        pwm3 = machine.PWM(machine.Pin(4), duty=0)
+    else:
+        pwm2 = machine.PWM(machine.Pin(15), duty=0)
 
-    pwm = [pwm0, pwm1, pwm2]
-
-    cb = Callback(pwm)
-
+    color_manager = ColorManager([pwm0, pwm1, pwm2])
 
     #~ robust.MQTTClient.DEBUG = True
 
     #create the mqtt client using config parameters
     client = robust.MQTTClient(config["client_id"], config["broker"])
     client.connect()
-    client.set_callback(cb.set_dimmer)
-    client.subscribe(config["topic"]+'/dimmer/+/command', 1)
 
     #create dht if it is enabled in config
     if config["dht"]:
@@ -114,6 +118,10 @@ def main_loop():
     elif config["ds1820"]:
         temp_sensor = ds18x20.DS18X20(onewire.OneWire(machine.Pin(0)))
         rom_id = temp_sensor.scan()[0]
+    elif config["bme280"]:
+        import bme280
+        i2c = machine.I2C(0, scl=machine.Pin(22), sda=machine.Pin(21))
+        temp_sensor = bme280.BME280(i2c=i2c,address=0x76)
     else:
         temp_sensor = None
 
@@ -125,9 +133,45 @@ def main_loop():
         adc = None
 
     #create the buttons and pwm channels
-    bt_pwm_1 = ButtonPwm(client, 0, pwm0, 4)
-    bt_pwm_2 = ButtonPwm(client, 1, pwm1, 5)
-    bt_pwm_3 = ButtonPwm(client, 2, pwm2, 14)
+
+    if config["esp32"]:
+        bt_pwm_1 = ButtonPwm(pwm0, 32)
+        bt_pwm_2 = ButtonPwm(pwm1, 33)
+        bt_pwm_3 = ButtonPwm(pwm2, 25)
+        bt_pwm_4 = ButtonPwm(pwm3, 26)
+    else:
+        bt_pwm_1 = ButtonPwm(pwm0, 4)
+        bt_pwm_2 = ButtonPwm(pwm1, 5)
+        bt_pwm_3 = ButtonPwm(pwm2, 14)
+
+    props_color = [ homie.Property("color", "desired color RGB", "color", None, "rgb", "000,000,000", color_manager.set_value),
+                    homie.Property("cycler", "cycler mode", "integer", None, None, "0", color_manager.set_cycler) ]
+
+    dim_props = [ homie.Property("chan-a", "Dimmer A", "float", "%", "0:100", 0, bt_pwm_1.set_value), \
+                  homie.Property("chan-b", "Dimmer B", "float", "%", "0:100", 0, bt_pwm_2.set_value), \
+                  homie.Property("chan-c", "Dimmer C", "float", "%", "0:100", 0, bt_pwm_3.set_value) ]
+    bt_pwm_1.property = dim_props[0]
+    bt_pwm_2.property = dim_props[1]
+    bt_pwm_3.property = dim_props[2]
+
+    if config["esp32"]:
+        dim_props.append(homie.Property("chan-d", "Dimmer D", "float", "%", "0:100", 0, bt_pwm_4))
+        bt_pwm_4.property = dim_props[3]
+
+    env_props = []
+    if config["dht"] or config["ds1820"] or config["bme280"]:
+        env_props.append(homie.Property("temperature", "Temperature", "float", "°C".encode("utf-8"), None, 0))
+    if config["dht"] or config["bme280"]:
+        env_props.append(homie.Property("humidity", "Humidity", "float", "%", "0:100", 0))
+    if config["bme280"]:
+         env_props.append(homie.Property("pressure", "Atmospheric pressure", "float", "mBar", None, 0))
+
+    nodes = [ homie.Node("color", "Color leds (on ABC)", props_color), homie.Node("dimmer", "Dimmers channels", dim_props)]
+
+    if env_props:
+        nodes.append(homie.Node("evironment", "Environment Measures", env_props))
+
+    device = homie.HomieDevice( client, ubinascii.hexlify(network.WLAN().config('mac')), nodes, "Multicontroler{}".format(config["location"]))
 
     time_tmp = 0
 
@@ -137,10 +181,12 @@ def main_loop():
 
     try:
         while True:
-            client.check_msg()
+            device.main()
             time.sleep(.050)
 
             cur_time = int(time.time())
+
+            color_manager.do_cycle()
 
             #this simple test enables to get in this loop every second
             if time_tmp != cur_time:
@@ -160,25 +206,31 @@ def main_loop():
                             raise
                         else:
                             #logging
-                            client.publish("{}/stat/dhterror".format(config['topic']), str(dht_err_ctr))
                             print("DHT error, retrying")
                     else:
                         dht_retry = 0
                         dht_err_ctr = 0
                         #all went well let's publish temperature
-                        client.publish(sensor_temp_str, str(temp_sensor.temperature()))
+                        env_props[0].send_value(str(temp_sensor.temperature()))
                         print(temp_sensor.temperature())
 
                         #publish humidity
                         if (cur_time % (60*30)) == dht_retry:
-                            client.publish(sensor_humid_str, str(temp_sensor.humidity()))
+                            env_props[1].send_value(str(temp_sensor.humidity()))
                 elif config["ds1820"] and (cur_time % 60) == 0:
                     temp_sensor.convert_temp()
                 elif config["ds1820"] and (cur_time % 60) == 1:
                     temp = temp_sensor.read_temp(rom_id)
                     #all went well let's publish temperature
-                    client.publish(sensor_temp_str, str(temp))
+                    env_props[0].send_value('{:.1f}'.format(temp))
                     print(temp)
+                elif config["bme280"] and (cur_time % 60) == 0:
+                    temp,pa,hum = temp_sensor.read_compensated_data()
+                    env_props[0].send_value('{:.1f}'.format(temp/100))
+                    env_props[1].send_value(str(hum//1024))
+                    env_props[2].send_value('{:.2f}'.format(pa/25600))
+                    print (temp/100,pa//25600,hum/1024)
+                    print(temp_sensor.values)
 
                 #analog publication period is user defined
                 if analog_period and (cur_time % analog_period) == 0:
