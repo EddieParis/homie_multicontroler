@@ -46,7 +46,7 @@ class ColorManager:
         return True
 
 
-class ButtonPwm(object):
+class Dimmer(object):
 
     def __init__(self, pwm, bt_pin):
         self.property = None
@@ -135,14 +135,14 @@ def main_loop():
     #create the buttons and pwm channels
 
     if config["esp32"]:
-        bt_pwm_1 = ButtonPwm(pwm0, 32)
-        bt_pwm_2 = ButtonPwm(pwm1, 33)
-        bt_pwm_3 = ButtonPwm(pwm2, 25)
-        bt_pwm_4 = ButtonPwm(pwm3, 26)
+        bt_pwm_1 = Dimmer(pwm0, 32)
+        bt_pwm_2 = Dimmer(pwm1, 33)
+        bt_pwm_3 = Dimmer(pwm2, 25)
+        bt_pwm_4 = Dimmer(pwm3, 26)
     else:
-        bt_pwm_1 = ButtonPwm(pwm0, 4)
-        bt_pwm_2 = ButtonPwm(pwm1, 5)
-        bt_pwm_3 = ButtonPwm(pwm2, 14)
+        bt_pwm_1 = Dimmer(pwm0, 4)
+        bt_pwm_2 = Dimmer(pwm1, 5)
+        bt_pwm_3 = Dimmer(pwm2, 14)
 
     props_color = [ homie.Property("color", "desired color RGB", "color", None, "rgb", "000,000,000", color_manager.set_value),
                     homie.Property("cycler", "cycler mode", "integer", None, None, "0", color_manager.set_cycler) ]

@@ -108,15 +108,14 @@ class Node:
             return False
 
 class Property:
-    def __init__(self, property_id, name, type, unit, format, init_value, value_set_cb=None):
-    # ~ def __init__(self, property_id, name, type, unit, format, init_value, retained, value_set_cb=None):
+    def __init__(self, property_id, name, type, unit, format, init_value, value_set_cb=None, retained=True):
         self.property_id = property_id
         self.name = name
         self.type = type
         self.unit = unit
         self.format = format
         self.init_value = str(init_value)
-        # ~ self.retained = retained
+        self.retained = retained
         self.value_set_cb = value_set_cb
 
     def publish(self, mqtt, base_list):
@@ -139,9 +138,9 @@ class Property:
             base_list[-1] = "$format"
             publish( self.mqtt, base_list, self.format)
 
-        # ~ if self.retained:
-            # ~ base_list[-1] = "$retained"
-            # ~ publish( self.mqtt, base_list, True)
+        if self.retained != True:
+            base_list[-1] = "$retained"
+            publish( self.mqtt, base_list, "false")
 
         if self.value_set_cb:
             base_list[-1] = "$settable"
