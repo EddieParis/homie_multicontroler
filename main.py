@@ -20,6 +20,7 @@ config = {
 "ds1820" : False,
 "bme280" : False,
 "analog_period" : 0,
+"analog_period2" : 0,
 "debug" : False
 }
 
@@ -94,6 +95,18 @@ class Dimmer(object):
         self.pwm.duty(int(float(value)*1023))
         return True
 
+class Analog(homie.Property):
+    def __init__(self, prop_id, prop_name, pin, period):
+        super(Analog, self).__init__(prop_id, prop_name, "float", None, "0:1", 0)
+        if config["esp32"]:
+            pin = machine.Pin(pin)
+        self.adc = machine.ADC(pin)
+        self.period = period
+
+    def periodic(self, cur_time):
+        if (cur_time % self.period) == 0:
+            self.send_value(str(self.adc.read()/1023.0))
+
 def main_loop():
 
     try:
@@ -132,12 +145,19 @@ def main_loop():
     else:
         temp_sensor = None
 
+    adcs = []
     #check in config for analog period
     analog_period = config['analog_period']
-    if analog_period != 0:
-        adc = machine.ADC(0)
+    analog_period2 = config['analog_period2']
+    if config["esp32"]:
+        if analog_period != 0:
+            adcs.append(Analog("analog1", "Analog sensor 1", 34, analog_period))
+        if analog_period2 != 0:
+            adcs.append(Analog("analog2", "Analog sensor 2", 35, analog_period2))
     else:
-        adc = None
+        if analog_period != 0:
+            adcs.append(Analog("analog1", "Analog sensor 1", 0, analog_period))
+
 
     #create the buttons and pwm channels
 
@@ -177,6 +197,9 @@ def main_loop():
 
     if env_props:
         nodes.append(homie.Node("evironment", "Environment Measures", env_props))
+
+    if adcs:
+        nodes.append(homie.Node("analog_sens", "Analog Sensors", adcs))
 
     device = homie.HomieDevice( client, ubinascii.hexlify(network.WLAN().config('mac')), nodes, "Multicontroler{}".format(config["location"]))
 
@@ -240,9 +263,8 @@ def main_loop():
                     print(temp_sensor.values)
 
                 #analog publication period is user defined
-                if analog_period and (cur_time % analog_period) == 0:
-                    adc.read()
-                    client.publish("{}/sensor/analog".format(config['topic']), str(adc.read()/1023.0) )
+                for adc in adcs:
+                    adc.periodic(cur_time)
 
             #buttons checks
             bt_pwm_1.periodic()
