@@ -25,11 +25,15 @@ config = {
 }
 
 class ColorManager:
-    def __init__(self, pwms):
-        self.pwms = pwms
+    def __init__(self, dimmers):
+        self.props = [ homie.Property("color", "desired color RGB", "color", None, "rgb", "000,000,000", self.set_color),
+                        homie.Property("cycler", "cycler mode", "integer", None, None, "0", self.set_cycler) ]
+        self.dimmers = dimmers[:3]
         self.cycle = 0
         self.angles = [0,0,0]
         self.increments = [math.pi/180, math.pi/260, math.pi/225]
+        for dimmer in self.dimmers:
+            dimmer.cycler = self
 
     def set_color(self, topic, value):
         for pwm, val in zip(self.pwms, value.split(",")):
@@ -38,9 +42,14 @@ class ColorManager:
 
     def do_cycle(self):
         if self.cycle:
-            for angle, pwm in zip(self.angles, self.pwms):
-                pwm.duty(int(511*math.cos(angle)+511))
-            self.angles = [ (angle + inc)%(math.pi*2) for angle, inc in zip(self.angles, self.increments) ]
+            for angle, dimmer in zip(self.angles, self.dimmers):
+                dimmer.pwm.duty(int(511*math.cos(angle)+511))
+            self.angles = [ (angle + inc*self.cycle)%(math.pi*2) for angle, inc in zip(self.angles, self.increments) ]
+
+    def stop_cycling(self):
+        if self.cycle:
+            self.cycle = 0
+            self.props[1].send_value(str(0))
 
     def set_cycler(self, topic, value):
         self.cycle = int(value)
@@ -57,6 +66,7 @@ class Dimmer(homie.Property):
         self.last_value = 0
         self.delta = 25
         self.top_pause = 0
+        self.cycler = None
 
     def periodic(self):
         """Short press (less than 10 calls) switches on and off, long press (more than 10 calls)
@@ -77,6 +87,8 @@ class Dimmer(homie.Property):
                 self.send_value(str(self.pwm.duty()/1023))
             else:
                 self.time_cnt += 1
+                if self.cycler and self.cycler.cycle:
+                    self.time_cnt = -1
                 if self.top_pause:
                     self.top_pause -= 1
         elif 0 < self.time_cnt <= 10:
@@ -87,6 +99,9 @@ class Dimmer(homie.Property):
                 self.last_value = self.pwm.duty()
                 self.pwm.duty(0)
             self.send_value(str(self.pwm.duty()/1023))
+            self.time_cnt = 0
+        elif self.time_cnt == -1:
+            self.cycler.stop_cycling()
             self.time_cnt = 0
         else:
             self.time_cnt = 0
@@ -124,7 +139,6 @@ def main_loop():
     else:
         pwm2 = machine.PWM(machine.Pin(15), duty=0)
 
-    color_manager = ColorManager([pwm0, pwm1, pwm2])
 
     #~ robust.MQTTClient.DEBUG = True
 
@@ -167,8 +181,7 @@ def main_loop():
     else:
         dimmers = [ Dimmer("A", pwm0, 4), Dimmer("B", pwm1, 5), Dimmer("C", pwm2, 14) ]
 
-    props_color = [ homie.Property("color", "desired color RGB", "color", None, "rgb", "000,000,000", color_manager.set_color),
-                    homie.Property("cycler", "cycler mode", "integer", None, None, "0", color_manager.set_cycler) ]
+    color_manager = ColorManager(dimmers)
 
     env_props = []
     if config["dht"] or config["ds1820"] or config["bme280"]:
@@ -178,7 +191,7 @@ def main_loop():
     if config["bme280"]:
          env_props.append(homie.Property("pressure", "Atmospheric pressure", "float", "mBar", None, 0))
 
-    nodes = [ homie.Node("color", "Color leds (on ABC)", props_color), homie.Node("dimmer", "Dimmers channels", dimmers)]
+    nodes = [ homie.Node("color", "Color leds (on ABC)", color_manager.props), homie.Node("dimmer", "Dimmers channels", dimmers)]
 
     if env_props:
         nodes.append(homie.Node("evironment", "Environment Measures", env_props))
