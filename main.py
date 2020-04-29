@@ -47,10 +47,10 @@ class ColorManager:
         return True
 
 
-class Dimmer(object):
+class Dimmer(homie.Property):
 
-    def __init__(self, pwm, bt_pin):
-        self.property = None
+    def __init__(self, dim_id, pwm, bt_pin):
+        super(Dimmer, self).__init__("chan_"+dim_id.lower(), "Dimmer "+dim_id.upper(), "float", "%", "0:100", 0, self.set_value)
         self.pwm = pwm
         self.button = machine.Pin(bt_pin, machine.Pin.IN, machine.Pin.PULL_UP)
         self.time_cnt = 0
@@ -74,7 +74,7 @@ class Dimmer(object):
                     self.delta = -self.delta
                     self.top_pause = 15
                 print(self.pwm.duty(), self.delta)
-                self.property.send_value(str(self.pwm.duty()/1023))
+                self.send_value(str(self.pwm.duty()/1023))
             else:
                 self.time_cnt += 1
                 if self.top_pause:
@@ -86,7 +86,7 @@ class Dimmer(object):
             else:
                 self.last_value = self.pwm.duty()
                 self.pwm.duty(0)
-            self.property.send_value(str(self.pwm.duty()/1023))
+            self.send_value(str(self.pwm.duty()/1023))
             self.time_cnt = 0
         else:
             self.time_cnt = 0
@@ -162,28 +162,13 @@ def main_loop():
     #create the buttons and pwm channels
 
     if config["esp32"]:
-        bt_pwm_1 = Dimmer(pwm0, 32)
-        bt_pwm_2 = Dimmer(pwm1, 33)
-        bt_pwm_3 = Dimmer(pwm2, 25)
-        bt_pwm_4 = Dimmer(pwm3, 26)
+        dimmers = [ Dimmer("A", pwm0, 32), Dimmer("B", pwm1, 33),
+                    Dimmer("C", pwm2, 25), Dimmer("D", pwm3, 26) ]
     else:
-        bt_pwm_1 = Dimmer(pwm0, 4)
-        bt_pwm_2 = Dimmer(pwm1, 5)
-        bt_pwm_3 = Dimmer(pwm2, 14)
+        dimmers = [ Dimmer("A", pwm0, 4), Dimmer("B", pwm1, 5), Dimmer("C", pwm2, 14) ]
 
     props_color = [ homie.Property("color", "desired color RGB", "color", None, "rgb", "000,000,000", color_manager.set_color),
                     homie.Property("cycler", "cycler mode", "integer", None, None, "0", color_manager.set_cycler) ]
-
-    dim_props = [ homie.Property("chan-a", "Dimmer A", "float", "%", "0:100", 0, bt_pwm_1.set_value), \
-                  homie.Property("chan-b", "Dimmer B", "float", "%", "0:100", 0, bt_pwm_2.set_value), \
-                  homie.Property("chan-c", "Dimmer C", "float", "%", "0:100", 0, bt_pwm_3.set_value) ]
-    bt_pwm_1.property = dim_props[0]
-    bt_pwm_2.property = dim_props[1]
-    bt_pwm_3.property = dim_props[2]
-
-    if config["esp32"]:
-        dim_props.append(homie.Property("chan-d", "Dimmer D", "float", "%", "0:100", 0, bt_pwm_4))
-        bt_pwm_4.property = dim_props[3]
 
     env_props = []
     if config["dht"] or config["ds1820"] or config["bme280"]:
@@ -193,7 +178,7 @@ def main_loop():
     if config["bme280"]:
          env_props.append(homie.Property("pressure", "Atmospheric pressure", "float", "mBar", None, 0))
 
-    nodes = [ homie.Node("color", "Color leds (on ABC)", props_color), homie.Node("dimmer", "Dimmers channels", dim_props)]
+    nodes = [ homie.Node("color", "Color leds (on ABC)", props_color), homie.Node("dimmer", "Dimmers channels", dimmers)]
 
     if env_props:
         nodes.append(homie.Node("evironment", "Environment Measures", env_props))
@@ -267,9 +252,8 @@ def main_loop():
                     adc.periodic(cur_time)
 
             #buttons checks
-            bt_pwm_1.periodic()
-            bt_pwm_2.periodic()
-            bt_pwm_3.periodic()
+            for dimmer in dimmers:
+                dimmer.periodic()
 
     except KeyboardInterrupt as excp:
         print ("Interrupted")
