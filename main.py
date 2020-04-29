@@ -30,7 +30,7 @@ class ColorManager:
         self.angles = [0,0,0]
         self.increments = [math.pi/180, math.pi/260, math.pi/225]
 
-    def set_value(self, topic, value):
+    def set_color(self, topic, value):
         for pwm, val in zip(self.pwms, value.split(",")):
             pwm.duty(int(float(val)*1023/255))
         return True
@@ -55,6 +55,7 @@ class Dimmer(object):
         self.time_cnt = 0
         self.last_value = 0
         self.delta = 25
+        self.top_pause = 0
 
     def periodic(self):
         """Short press (less than 10 calls) switches on and off, long press (more than 10 calls)
@@ -63,16 +64,22 @@ class Dimmer(object):
         Buttons are active low, hardware uses internall ESP pull up for open position.
         """
         if self.button.value() == 0:
-            if self.time_cnt > 10 and self.time_cnt % 2 == 0:
+            if self.time_cnt > 10 and self.time_cnt % 2 == 0 and self.top_pause == 0:
                 self.time_cnt += 1
                 self.pwm.duty( self.pwm.duty() + self.delta )
-                if self.pwm.duty() == 0 or self.pwm.duty() == 1023 :
+                if self.pwm.duty() == 0:
                     self.delta = -self.delta
+                elif self.pwm.duty() == 1023:
+                    self.delta = -self.delta
+                    self.top_pause = 15
                 print(self.pwm.duty(), self.delta)
                 self.property.send_value(str(self.pwm.duty()/1023))
             else:
                 self.time_cnt += 1
+                if self.top_pause:
+                    self.top_pause -= 1
         elif 0 < self.time_cnt <= 10:
+            self.top_pause = 0
             if self.pwm.duty() == 0:
                 self.pwm.duty(self.last_value)
             else:
@@ -144,7 +151,7 @@ def main_loop():
         bt_pwm_2 = Dimmer(pwm1, 5)
         bt_pwm_3 = Dimmer(pwm2, 14)
 
-    props_color = [ homie.Property("color", "desired color RGB", "color", None, "rgb", "000,000,000", color_manager.set_value),
+    props_color = [ homie.Property("color", "desired color RGB", "color", None, "rgb", "000,000,000", color_manager.set_color),
                     homie.Property("cycler", "cycler mode", "integer", None, None, "0", color_manager.set_cycler) ]
 
     dim_props = [ homie.Property("chan-a", "Dimmer A", "float", "%", "0:100", 0, bt_pwm_1.set_value), \
