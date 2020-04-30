@@ -36,8 +36,8 @@ class ColorManager:
             dimmer.cycler = self
 
     def set_color(self, topic, value):
-        for pwm, val in zip(self.pwms, value.split(",")):
-            pwm.duty(int(float(val)*1023/255))
+        for dimmer, val in zip(self.dimmers, value.split(",")):
+            dimmer.pwm.duty(int(float(val)*1023/255))
         return True
 
     def do_cycle(self):
