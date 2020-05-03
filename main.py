@@ -154,7 +154,10 @@ def main_loop():
         rom_id = temp_sensor.scan()[0]
     elif config["bme280"]:
         import bme280
-        i2c = machine.I2C(0, scl=machine.Pin(22), sda=machine.Pin(21))
+        if config["esp32"]:
+            i2c = machine.I2C(0, scl=machine.Pin(22), sda=machine.Pin(21))
+        else:
+            i2c = machine.I2C(scl=machine.Pin(16), sda=machine.Pin(0))
         temp_sensor = bme280.BME280(i2c=i2c,address=0x76)
     else:
         temp_sensor = None
