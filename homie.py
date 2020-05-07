@@ -5,7 +5,7 @@ import time
 
 VERSION = "3.0"
 
-TIME_SEND_INTERVAL = 50*1000
+NAME_SEND_INTERVAL = 50
 log = True
 
 def publish(mqtt, topic, value):
@@ -30,18 +30,23 @@ class HomieDevice:
         self.mqtt = mqtt
         self.mqtt.set_callback(self.subscribe_cb)
 
-        base_list = [self.base, device_id.decode("ascii"), "" ]
+        base_list = [self.base, device_id.decode("ascii"), "$state" ]
+        state_topic = "/".join(base_list)
+        self.mqtt.set_last_will(state_topic, "lost", True, 1)
+
+        self.mqtt.connect(clean_session=True)
+        self.mqtt.disconnect()
+        self.mqtt.connect(clean_session=False)
 
         base_list[-1] = "$homie"
         publish(self.mqtt, base_list, VERSION)
 
         base_list[-1] = "$name"
         self.name_topic = publish(self.mqtt, base_list, nice_device_name)
-        self.last_name_sent = time.ticks_ms()
+        self.last_name_sent = time.time()
 
         base_list[-1] = "$state"
         state_topic = publish(self.mqtt, base_list, "init")
-        self.mqtt.set_last_will(state_topic, "lost", True, 1)
 
         base_list[-1] = "$nodes"
         publish(self.mqtt, base_list, ",".join([node.node_id for node in self.nodes]))
@@ -68,8 +73,8 @@ class HomieDevice:
         while len(publish_wait_queue):
             prop, value = publish_wait_queue.pop()
             prop.send_value(value)
-        now = time.ticks_ms()
-        if time.ticks_diff(now, self.last_name_sent) > TIME_SEND_INTERVAL:
+        now = time.time()
+        if now - self.last_name_sent > NAME_SEND_INTERVAL:
             publish(self.mqtt, self.name_topic, self.nice_device_name)
             self.last_name_sent = now
 

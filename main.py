@@ -2,8 +2,6 @@ import robust
 import machine
 import ubinascii
 import time
-import dht
-import onewire, ds18x20
 import ujson
 import sys
 import network
@@ -30,7 +28,7 @@ class ColorManager:
                         homie.Property("cycler", "cycler mode", "integer", None, None, "0", self.set_cycler) ]
         self.dimmers = dimmers[:3]
         self.cycle = 0
-        self.angles = [0,0,0]
+        self.angles = [math.pi,math.pi,math.pi]
         self.increments = [math.pi/180, math.pi/260, math.pi/225]
         for dimmer in self.dimmers:
             dimmer.cycler = self
@@ -144,14 +142,16 @@ def main_loop():
 
     #create the mqtt client using config parameters
     client = robust.MQTTClient(config["client_id"], config["broker"])
-    client.connect()
+
 
     #create dht if it is enabled in config
     if config["dht"]:
+        import dht
         temp_sensor = dht.DHT22(machine.Pin(0))
     elif config["ds1820"]:
+        import onewire, ds18x20
         temp_sensor = ds18x20.DS18X20(onewire.OneWire(machine.Pin(0)))
-        rom_id = temp_sensor.scan()[0]
+        rom_ids = temp_sensor.scan()
     elif config["bme280"]:
         import bme280
         if config["esp32"]:
@@ -251,7 +251,7 @@ def main_loop():
                 elif config["ds1820"] and (cur_time % 60) == 0:
                     temp_sensor.convert_temp()
                 elif config["ds1820"] and (cur_time % 60) == 1:
-                    temp = temp_sensor.read_temp(rom_id)
+                    temp = temp_sensor.read_temp(rom_ids[0])
                     #all went well let's publish temperature
                     env_props[0].send_value('{:.1f}'.format(temp))
                     print(temp)
@@ -261,7 +261,6 @@ def main_loop():
                     env_props[1].send_value(str(hum//1024))
                     env_props[2].send_value('{:.2f}'.format(pa/25600))
                     print (temp/100,pa//25600,hum/1024)
-                    print(temp_sensor.values)
 
                 #analog publication period is user defined
                 for adc in adcs:
@@ -277,6 +276,9 @@ def main_loop():
 
     except Exception as excp:
         sys.print_exception(excp)
+        with open("exceptions.txt", "at") as excp_file:
+            sys.print_exception(excp, excp_file)
+            excp_file.write("\n")
 
         #if debug mode is not enabled in config automatic reset in 10 seconds
         if config['debug'] == False:
