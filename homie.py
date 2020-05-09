@@ -23,11 +23,14 @@ publish_wait_queue = []
 
 class HomieDevice:
     base = "homie"
+    BROADCAST = "$broadcast"
 
-    def __init__(self, mqtt, device_id, nodes, nice_device_name):
+    def __init__(self, mqtt, device_id, nodes, nice_device_name, broadcast_cb=None):
+        self.mqtt = mqtt
         self.nodes = nodes
         self.nice_device_name = nice_device_name
-        self.mqtt = mqtt
+        self.user_cb = None
+        self.broadcast_cb = broadcast_cb
         self.mqtt.set_callback(self.subscribe_cb)
 
         base_list = [self.base, device_id.decode("ascii"), "$state" ]
@@ -45,28 +48,42 @@ class HomieDevice:
         self.name_topic = publish(self.mqtt, base_list, nice_device_name)
         self.last_name_sent = time.time()
 
-        base_list[-1] = "$state"
-        state_topic = publish(self.mqtt, base_list, "init")
+        publish(self.mqtt, state_topic, "init")
 
         base_list[-1] = "$nodes"
         publish(self.mqtt, base_list, ",".join([node.node_id for node in self.nodes]))
 
+        settable = False
         for node in nodes:
-            node.publish(self.mqtt, list(base_list))
+            settable |= node.expose(self.mqtt, list(base_list))
+        if settable:
+            base_list[-1] = "+"
+            base_list.append("+")
+            base_list.append("set")
+            mqtt.subscribe("/".join(base_list))
+
+        if broadcast_cb:
+            mqtt.subscribe("/".join([self.base, self.BROADCAST, '#']), 1)
 
         publish(self.mqtt, state_topic, "ready")
 
-    def subscribe_cb(self, topic, content):
+    def set_user_cb(self, cb):
+        self.user_cb = cb
+
+    def subscribe_cb(self, topic, content, retain):
         topic_split = topic.decode("ascii").split("/")
         value = content.decode("utf-8")
-        node_iter = iter(self.nodes)
         found = False
-        while not found:
-            try:
-                node = next(node_iter)
-            except StopIteration:
-                return False
-            found = node.action_set(topic_split, value)
+        if len(topic_split) == 5 and topic_split[4] == "set":
+            for node in self.nodes:
+                found = node.action_set(topic_split, value)
+                if found:
+                    break;
+        if not found and self.broadcast_cb and topic_split[1]=="$broadcast":
+            self.broadcast_cb(topic, content, retain)
+            found = True
+        if not found and self.user_cb:
+            self.user_cb(topic, content)
 
     def main(self):
         self.mqtt.check_msg()
@@ -85,7 +102,7 @@ class Node:
         self.name = name
         self.properties = properties
 
-    def publish(self, mqtt, base_list):
+    def expose(self, mqtt, base_list):
         self.mqtt = mqtt
 
         base_list[-1] = self.node_id
@@ -96,21 +113,17 @@ class Node:
         base_list[-1] = "$properties"
         publish( self.mqtt, base_list, ",".join([prop.property_id for prop in self.properties]))
 
+        settable = False
         for prop in self.properties:
-            prop.publish(self.mqtt, list(base_list))
+            settable |= prop.expose(self.mqtt, list(base_list))
+        return settable
 
     def action_set(self, topic_split, value):
         if topic_split[2] == self.node_id:
-            prop_iter = iter(self.properties)
-            found = False
-            while not found:
-                try:
-                    prop = next(prop_iter)
-                except StopIteration:
-                    return False
-                found = prop.call_cb(topic_split, value)
-        else:
-            return False
+            for prop in self.properties:
+                if prop.call_cb(topic_split, value):
+                    return True
+        return False
 
 class Property:
     def __init__(self, property_id, name, type, unit, format, init_value, value_set_cb=None, retained=True):
@@ -123,7 +136,7 @@ class Property:
         self.retained = retained
         self.value_set_cb = value_set_cb
 
-    def publish(self, mqtt, base_list):
+    def expose(self, mqtt, base_list):
         self.mqtt = mqtt
 
         base_list[-1] = self.property_id
@@ -143,31 +156,32 @@ class Property:
             base_list[-1] = "$format"
             publish( self.mqtt, base_list, self.format)
 
-        if self.retained != True:
+        if not self.retained:
             base_list[-1] = "$retained"
             publish( self.mqtt, base_list, "false")
 
         if self.value_set_cb:
             base_list[-1] = "$settable"
             publish( self.mqtt, base_list, "true")
-            base_list[-1] = "set"
-            self.mqtt.subscribe("/".join(base_list), 1)
+            return True
+        return False
 
     def send_value(self, value):
         publish(self.mqtt, self.value_topic, value)
 
     def call_cb(self, topic_split, value):
-        if topic_split[3] == self.property_id:
+        if topic_split[3] == self.property_id and self.value_set_cb:
             if self.value_set_cb(topic_split, value):
                 publish_wait_queue.append((self, value))
             return True
         else:
             return False
 
-def my_cb(topic_split, value):
-    print ("custom cb", topic_split[-1], value)
 
 if __name__ == "__main__":
+    def my_cb(topic_split, value):
+        print ("custom cb", topic_split[-1], value)
+
     MQTT_ID = b"esp32_"+ ubinascii.hexlify(machine.unique_id())
 
     mqtt = robust.MQTTClient(MQTT_ID, "192.168.2.42")

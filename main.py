@@ -120,6 +120,9 @@ class Analog(homie.Property):
         if (cur_time % self.period) == 0:
             self.send_value(str(self.adc.read()/1023.0))
 
+def homie_broadcast_cb(topic, value, retained):
+    print("broadcst :", topic, value, retained)
+
 def main_loop():
 
     try:
@@ -141,7 +144,7 @@ def main_loop():
     #~ robust.MQTTClient.DEBUG = True
 
     #create the mqtt client using config parameters
-    client = robust.MQTTClient(config["client_id"], config["broker"])
+    client = robust.MQTTClient(config["client_id"], config["broker"], keepalive=homie.NAME_SEND_INTERVAL)
 
 
     #create dht if it is enabled in config
@@ -175,7 +178,6 @@ def main_loop():
         if analog_period != 0:
             adcs.append(Analog("analog1", "Analog sensor 1", 0, analog_period))
 
-
     #create the buttons and pwm channels
 
     if config["esp32"]:
@@ -202,7 +204,7 @@ def main_loop():
     if adcs:
         nodes.append(homie.Node("analog_sens", "Analog Sensors", adcs))
 
-    device = homie.HomieDevice( client, ubinascii.hexlify(network.WLAN().config('mac')), nodes, "Multicontroler{}".format(config["location"]))
+    device = homie.HomieDevice( client, ubinascii.hexlify(network.WLAN().config('mac')), nodes, "Multicontroler{}".format(config["location"]), homie_broadcast_cb)
 
     time_tmp = 0
 
