@@ -8,14 +8,14 @@ VERSION = "3.0"
 NAME_SEND_INTERVAL = 50
 log = True
 
-def publish(mqtt, topic, value):
+def publish(mqtt, topic, value, qos=1):
     if isinstance(topic, list):
         joint_topic = "/".join(topic)
     else:
         joint_topic = topic
     if log:
         print(joint_topic, value)
-    mqtt.publish(joint_topic, value, True, 1)
+    mqtt.publish(joint_topic, value, True, qos)
     return joint_topic
 
 
@@ -167,7 +167,7 @@ class Property:
         return False
 
     def send_value(self, value):
-        publish(self.mqtt, self.value_topic, value)
+        publish(self.mqtt, self.value_topic, value, 1 if self.retained else 0)
 
     def call_cb(self, topic_split, value):
         if topic_split[3] == self.property_id and self.value_set_cb:
