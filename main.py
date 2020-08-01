@@ -12,6 +12,7 @@ import ntptime
 import dht
 import bme280
 import homie
+import env_sensors
 
 config = {
 "esp32" : False,
@@ -112,89 +113,6 @@ class Dimmer(homie.Property):
         self.pwm.duty(int(float(value)*1023))
         return True
 
-class EnironmentNode(homie.Node):
-    def __init__(self, props, num):
-        ext = ""
-        name_ext =""
-        if num:
-            ext = str(num)
-            name_ext = " {}".format(num)
-        super().__init__("environment"+ext, "Environment Measures", props)
-
-    def get_temp_prop(self):
-        return homie.Property("temperature", "Temperature", "float", "°C".encode("utf-8"), None, 0, retain=False)
-
-    def get_humid_prop(self):
-        return homie.Property("humidity", "Humidity", "float", "%", "0:100", 0, retain=False)
-
-    def get_press_prop(self):
-        return homie.Property("pressure", "Atmospheric pressure", "float", "mBar", None, 0, retain=False)
-
-class EnvironmentDht(EnironmentNode):
-    def __init__(self):
-        super().__init__([self.get_temp_prop(), self.get_humid_prop()], None)
-        self.dht_retry = 0
-        self.driver = temp_sensor = dht.DHT22(machine.Pin(0))
-
-    def periodic(self, now):
-        if config["dht"] and (now % 60) == self.dht_retry :
-            try:
-                self.driver.measure()
-            except (OSError, dht.DHTChecsumError) as excp:
-                #If we have an exception, retry in 4 seconds
-                self.dht_retry +=4
-                self.dht_err_ctr += 1
-                if self.dht_retry == 40:
-                    #too many retries, raise the original exception
-                    raise
-                else:
-                    #logging
-                    print("DHT error, retrying")
-            else:
-                self.dht_retry = 0
-                self.dht_err_ctr = 0
-                #all went well let's publish temperature
-                self.properties[0].send_value(str(self.driver.temperature()))
-                print(self.driver.temperature())
-
-                #publish humidity
-                if (now % (60*30)) == self.dht_retry:
-                    self.properties[1].send_value(str(self.driver.humidity()))
-
-class EnvironmentDS1820(EnironmentNode):
-    def __init__(self, driver, rom_id, num):
-        super().__init__([self.get_temp_prop()], num)
-        self.num = num
-        self.driver = driver
-        self.rom_id = rom_id
-
-    def periodic(self, now):
-        if (now % 60) == 0 and not self.num:
-            self.driver.convert_temp()
-        elif (now % 60) == 1:
-            temp = self.driver.read_temp(self.rom_id)
-            #all went well let's publish temperature
-            self.properties[0].send_value('{:.1f}'.format(temp))
-            print(temp)
-
-class EnvironmentBME280(EnironmentNode):
-    def __init__(self, i2c, addr, num):
-        self.driver = bme280.BME280(address=addr, i2c=i2c)
-        if self.driver.humidity_capable:
-            super().__init__([self.get_temp_prop(), self.get_press_prop(), self.get_humid_prop()], num)
-        else:
-            super().__init__([self.get_temp_prop(), self.get_press_prop()], num)
-
-    def periodic(self, now):
-        if (now % 60) == 0:
-            temp,pa,hum = self.driver.read_compensated_data()
-            self.properties[0].send_value('{:.1f}'.format(temp/100))
-            self.properties[1].send_value('{:.2f}'.format(pa/25600))
-            if self.driver.humidity_capable:
-                self.properties[2].send_value(str(hum//1024))
-            print (temp/100,pa//25600,hum/1024)
-
-
 class Analog(homie.Property):
     def __init__(self, prop_id, prop_name, pin, period):
         super(Analog, self).__init__(prop_id, prop_name, "float", None, "0:1", 0)
@@ -208,7 +126,7 @@ class Analog(homie.Property):
             self.send_value(str(self.adc.read()/1023.0))
 
 def homie_broadcast_cb(topic, value, retained):
-    print("broadcst :", topic, value, retained)
+    print("broadcast :", topic, value, retained)
 
 def main_loop():
 
@@ -236,11 +154,11 @@ def main_loop():
 
     #create dht if it is enabled in config
     if config["dht"]:
-        env_nodes = [EnvironmentDht()]
+        env_nodes = [env_sensors.EnvironmentDht()]
     elif config["ds1820"]:
         import onewire, ds18x20
         ds_driver = ds18x20.DS18X20(onewire.OneWire(machine.Pin(0)))
-        env_nodes = [EnvironmentDS1820(ds_driver, rom, num) for num, rom in enumerate(ds_driver.scan())]
+        env_nodes = [env_sensors.EnvironmentDS1820(ds_driver, rom, num) for num, rom in enumerate(ds_driver.scan())]
     elif config["bme280"]:
         if config["esp32"]:
             i2c = machine.I2C(0, scl=machine.Pin(22), sda=machine.Pin(21))
@@ -248,7 +166,7 @@ def main_loop():
             i2c = machine.I2C(scl=machine.Pin(16), sda=machine.Pin(0))
         devices = i2c.scan()
         bme_addrs = [addr for addr in devices if addr == 0x76 or addr == 0x77]
-        env_nodes = [EnvironmentBME280(i2c, addr, num) for num, addr in enumerate(bme_addrs)]
+        env_nodes = [env_sensors.EnvironmentBME280(i2c, addr, num) for num, addr in enumerate(bme_addrs)]
     else:
         env_nodes = None
 
