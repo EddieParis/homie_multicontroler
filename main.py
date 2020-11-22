@@ -1,5 +1,5 @@
 import robust
-import machine
+from machine import Pin, PWM, ADC, I2C, RTC, reset
 import ubinascii
 import time
 import ujson
@@ -9,8 +9,6 @@ import math
 
 import ntptime
 
-import dht
-import bme280
 import homie
 import env_sensors
 
@@ -68,7 +66,7 @@ class Dimmer(homie.Property):
     def __init__(self, dim_id, pwm, bt_pin):
         super(Dimmer, self).__init__("chan_"+dim_id.lower(), "Dimmer "+dim_id.upper(), "float", "%", "0:100", 0, self.set_value)
         self.pwm = pwm
-        self.button = machine.Pin(bt_pin, machine.Pin.IN, machine.Pin.PULL_UP)
+        self.button = Pin(bt_pin, Pin.IN, Pin.PULL_UP)
         self.time_cnt = 0
         self.last_value = 0
         self.delta = 25
@@ -122,8 +120,8 @@ class Analog(homie.Property):
     def __init__(self, prop_id, prop_name, pin, period, bits=10, attn=0):
         super(Analog, self).__init__(prop_id, prop_name, "float", None, "0:{}".format(Analog.maxes[attn]), 0)
         if config["esp32"]:
-            pin = machine.Pin(pin)
-        self.adc = machine.ADC(pin)
+            pin = Pin(pin)
+        self.adc = ADC(pin)
         if config["esp32"]:
             self.adc.atten(attn)
             self.adc.width(bits-9)
@@ -148,14 +146,14 @@ def main_loop():
         pass
 
     #create the pwm channels
-    pwm0 = machine.PWM(machine.Pin(12), duty=0)
+    pwm0 = PWM(Pin(12), duty=0)
     pwm0.freq(150)
-    pwm1 = machine.PWM(machine.Pin(13), duty=0)
+    pwm1 = PWM(Pin(13), duty=0)
     if config["esp32"]:
-        pwm2 = machine.PWM(machine.Pin(2), duty=0)
-        pwm3 = machine.PWM(machine.Pin(4), duty=0)
+        pwm2 = PWM(Pin(2), duty=0)
+        pwm3 = PWM(Pin(4), duty=0)
     else:
-        pwm2 = machine.PWM(machine.Pin(15), duty=0)
+        pwm2 = PWM(Pin(15), duty=0)
 
 
     #~ robust.MQTTClient.DEBUG = True
@@ -169,13 +167,13 @@ def main_loop():
         env_nodes = [env_sensors.EnvironmentDht()]
     elif config["ds1820"]:
         import onewire, ds18x20
-        ds_driver = ds18x20.DS18X20(onewire.OneWire(machine.Pin(0)))
+        ds_driver = ds18x20.DS18X20(onewire.OneWire(Pin(0)))
         env_nodes = [env_sensors.EnvironmentDS1820(ds_driver, rom, num) for num, rom in enumerate(ds_driver.scan())]
     elif config["bme280"]:
         if config["esp32"]:
-            i2c = machine.I2C(0, scl=machine.Pin(22), sda=machine.Pin(21))
+            i2c = I2C(0, scl=Pin(22), sda=Pin(21))
         else:
-            i2c = machine.I2C(scl=machine.Pin(16), sda=machine.Pin(0))
+            i2c = I2C(scl=Pin(16), sda=Pin(0))
         devices = i2c.scan()
         bme_addrs = [addr for addr in devices if addr == 0x76 or addr == 0x77]
         env_nodes = [env_sensors.EnvironmentBME280(i2c, addr, num) for num, addr in enumerate(bme_addrs)]
@@ -253,7 +251,7 @@ def main_loop():
     except Exception as excp:
         sys.print_exception(excp)
         with open("exceptions.txt", "at") as excp_file:
-            excp_file.write(str(machine.RTC().datetime()))
+            excp_file.write(str(RTC().datetime()))
             excp_file.write(" GMT\n")
             sys.print_exception(excp, excp_file)
             excp_file.write("\n")
@@ -263,7 +261,7 @@ def main_loop():
             for count in range (10,0, -1):
                 print("Reboot in {} seconds\r".format(count))
                 time.sleep(1)
-            machine.reset()
+            reset()
     finally:
         client.disconnect()
 

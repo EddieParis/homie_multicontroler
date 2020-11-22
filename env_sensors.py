@@ -1,6 +1,5 @@
 import homie
 
-
 class EnironmentNode(homie.Node):
     def __init__(self, props, num):
         ext = ""
@@ -21,6 +20,7 @@ class EnvironmentDht(EnironmentNode):
     def __init__(self):
         super().__init__([self.get_temp_prop(), self.get_humid_prop()], None)
         self.dht_retry = 0
+        self.dht_err_ctr = 0
         self.driver = temp_sensor = dht.DHT22(machine.Pin(0))
 
     def periodic(self, now):
@@ -66,6 +66,7 @@ class EnvironmentDS1820(EnironmentNode):
 
 class EnvironmentBME280(EnironmentNode):
     def __init__(self, i2c, addr, num):
+        import bme280
         self.driver = bme280.BME280(address=addr, i2c=i2c)
         if self.driver.humidity_capable:
             super().__init__([self.get_temp_prop(), self.get_press_prop(), self.get_humid_prop()], num)
