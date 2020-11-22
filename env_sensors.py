@@ -9,13 +9,13 @@ class EnironmentNode(homie.Node):
         super().__init__("environment"+ext, "Environment Measures", props)
 
     def get_temp_prop(self):
-        return homie.Property("temperature", "Temperature", "float", "°C".encode("utf-8"), None, 0, retained=False)
+        return homie.Property("temperature", "Temperature", "float", "°C".encode("utf-8"), None, 0)
 
     def get_humid_prop(self):
-        return homie.Property("humidity", "Humidity", "float", "%", "0:100", 0, retained=False)
+        return homie.Property("humidity", "Humidity", "float", "%", "0:100", 0)
 
     def get_press_prop(self):
-        return homie.Property("pressure", "Atmospheric pressure", "float", "mBar", None, 0, retained=False)
+        return homie.Property("pressure", "Atmospheric pressure", "float", "mBar", None, 0)
 
 class EnvironmentDht(EnironmentNode):
     def __init__(self):

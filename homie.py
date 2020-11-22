@@ -8,14 +8,14 @@ VERSION = "3.0"
 NAME_SEND_INTERVAL = 50
 log = True
 
-def publish(mqtt, topic, value, qos=1):
+def publish(mqtt, topic, value, qos=1, retained=True):
     if isinstance(topic, list):
         joint_topic = "/".join(topic)
     else:
         joint_topic = topic
     if log:
         print(joint_topic, value)
-    mqtt.publish(joint_topic, value, True, qos)
+    mqtt.publish(joint_topic, value, retained, qos)
     return joint_topic
 
 
@@ -92,7 +92,7 @@ class HomieDevice:
             prop.send_value(value)
         now = time.time()
         if now - self.last_name_sent > NAME_SEND_INTERVAL:
-            publish(self.mqtt, self.name_topic, self.nice_device_name)
+            publish(self.mqtt, self.name_topic, self.nice_device_name, 0, False)
             self.last_name_sent = now
 
 
@@ -167,7 +167,7 @@ class Property:
         return False
 
     def send_value(self, value):
-        publish(self.mqtt, self.value_topic, value, 1 if self.retained else 0)
+        publish(self.mqtt, self.value_topic, value, 0, self.retained)
 
     def call_cb(self, topic_split, value):
         if topic_split[3] == self.property_id and self.value_set_cb:
