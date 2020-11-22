@@ -23,7 +23,11 @@ config = {
 "ds1820" : False,
 "bme280" : False,
 "analog_period" : 0,
-"analog_period2" : 0,
+"analog_bits" : 10,
+"analog_attn": 0,
+"analog2_period" : 0,
+"analog2_bits" : 10,
+"analog2_attn": 0,
 "debug" : False
 }
 
@@ -114,16 +118,23 @@ class Dimmer(homie.Property):
         return True
 
 class Analog(homie.Property):
-    def __init__(self, prop_id, prop_name, pin, period):
-        super(Analog, self).__init__(prop_id, prop_name, "float", None, "0:1", 0)
+    maxes=[1,1.34,2,3.6]
+    def __init__(self, prop_id, prop_name, pin, period, bits=10, attn=0):
+        super(Analog, self).__init__(prop_id, prop_name, "float", None, "0:{}".format(Analog.maxes[attn]), 0)
         if config["esp32"]:
             pin = machine.Pin(pin)
         self.adc = machine.ADC(pin)
+        if config["esp32"]:
+            self.adc.atten(attn)
+            self.adc.width(bits-9)
         self.period = period
+        self.range = (2**bits)-1
+        self.max = Analog.maxes[attn]
 
     def periodic(self, cur_time):
         if (cur_time % self.period) == 0:
-            self.send_value(str(self.adc.read()/1023.0))
+            print(self.adc.read())
+            self.send_value(str(self.max*self.adc.read()/self.range))
 
 def homie_broadcast_cb(topic, value, retained):
     print("broadcast :", topic, value, retained)
@@ -137,7 +148,8 @@ def main_loop():
         pass
 
     #create the pwm channels
-    pwm0 = machine.PWM(machine.Pin(12), duty=0, freq=150)
+    pwm0 = machine.PWM(machine.Pin(12), duty=0)
+    pwm0.freq(150)
     pwm1 = machine.PWM(machine.Pin(13), duty=0)
     if config["esp32"]:
         pwm2 = machine.PWM(machine.Pin(2), duty=0)
@@ -168,17 +180,17 @@ def main_loop():
         bme_addrs = [addr for addr in devices if addr == 0x76 or addr == 0x77]
         env_nodes = [env_sensors.EnvironmentBME280(i2c, addr, num) for num, addr in enumerate(bme_addrs)]
     else:
-        env_nodes = None
+        env_nodes = []
 
     adcs = []
     #check in config for analog period
     analog_period = config['analog_period']
-    analog_period2 = config['analog_period2']
+    analog2_period = config['analog2_period']
     if config["esp32"]:
         if analog_period != 0:
-            adcs.append(Analog("analog1", "Analog sensor 1", 34, analog_period))
-        if analog_period2 != 0:
-            adcs.append(Analog("analog2", "Analog sensor 2", 35, analog_period2))
+            adcs.append(Analog("analog1", "Analog sensor 1", 34, analog_period, config["analog_bits"], config["analog_attn"]))
+        if analog2_period != 0:
+            adcs.append(Analog("analog2", "Analog sensor 2", 35, analog2_period, config["analog2_bits"], config["analog2_attn"]))
     else:
         if analog_period != 0:
             adcs.append(Analog("analog1", "Analog sensor 1", 0, analog_period))
