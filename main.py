@@ -89,7 +89,7 @@ class Dimmer(homie.Property):
                     self.delta = -self.delta
                     self.top_pause = 15
                 print(self.pwm.duty(), self.delta)
-                self.send_value(str(self.pwm.duty()/1023))
+                self.send_value(str(int(self.pwm.duty()/1023*100)))
             else:
                 self.time_cnt += 1
                 if self.cycler and self.cycler.cycle:
@@ -103,7 +103,7 @@ class Dimmer(homie.Property):
             else:
                 self.last_value = self.pwm.duty()
                 self.pwm.duty(0)
-            self.send_value(str(self.pwm.duty()/1023))
+            self.send_value(str(int(self.pwm.duty()/1023*100)))
             self.time_cnt = 0
         elif self.time_cnt == -1:
             self.cycler.stop_cycling()
@@ -112,7 +112,7 @@ class Dimmer(homie.Property):
             self.time_cnt = 0
 
     def set_value(self, topic, value):
-        self.pwm.duty(int(float(value)*1023))
+        self.pwm.duty(int(float(value)/100*1023))
         return True
 
 class Analog(homie.Property):

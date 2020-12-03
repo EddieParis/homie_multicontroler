@@ -1,10 +1,9 @@
-from machine import unique_id
-import ubinascii
 import time
+from micropython import const
 
 VERSION = "3.0"
 
-NAME_SEND_INTERVAL = 50
+NAME_SEND_INTERVAL = const(50)
 log = True
 
 def publish(mqtt, topic, value, qos=1, retained=True):
@@ -176,9 +175,10 @@ class Property:
         else:
             return False
 
-
 if __name__ == "__main__":
     import robust
+    from machine import unique_id
+    import ubinascii
 
     def my_cb(topic_split, value):
         print ("custom cb", topic_split[-1], value)
