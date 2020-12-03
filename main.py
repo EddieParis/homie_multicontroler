@@ -159,7 +159,7 @@ def main_loop():
     #~ robust.MQTTClient.DEBUG = True
 
     #create the mqtt client using config parameters
-    client = robust.MQTTClient(config["client_id"], config["broker"], keepalive=homie.NAME_SEND_INTERVAL)
+    mqtt = robust.MQTTClient(config["client_id"], config["broker"], keepalive=homie.NAME_SEND_INTERVAL)
 
 
     #create dht if it is enabled in config
@@ -211,13 +211,9 @@ def main_loop():
     if adcs:
         nodes.append(homie.Node("analog_sens", "Analog Sensors", adcs))
 
-    device = homie.HomieDevice( client, ubinascii.hexlify(network.WLAN().config('mac')), nodes, "Multicontroler{}".format(config["location"]), homie_broadcast_cb)
+    device = homie.HomieDevice( mqtt, ubinascii.hexlify(network.WLAN().config('mac')), nodes, "Multicontroler{}".format(config["location"]), homie_broadcast_cb)
 
     time_tmp = 0
-
-    dht_retry = 0
-
-    dht_err_ctr = 0
 
     try:
         while True:
@@ -258,12 +254,13 @@ def main_loop():
 
         #if debug mode is not enabled in config automatic reset in 10 seconds
         if config['debug'] == False:
+            mqtt.disconnect()
             for count in range (10,0, -1):
                 print("Reboot in {} seconds\r".format(count))
                 time.sleep(1)
             reset()
     finally:
-        client.disconnect()
+        mqtt.disconnect()
 
 ntptime.settime()
 
