@@ -155,13 +155,6 @@ def main_loop():
     else:
         pwm2 = PWM(Pin(15), duty=0)
 
-
-    #~ robust.MQTTClient.DEBUG = True
-
-    #create the mqtt client using config parameters
-    mqtt = robust.MQTTClient(config["client_id"], config["broker"], keepalive=homie.NAME_SEND_INTERVAL)
-
-
     #create dht if it is enabled in config
     if config["dht"]:
         env_nodes = [env_sensors.EnvironmentDht()]
@@ -211,11 +204,16 @@ def main_loop():
     if adcs:
         nodes.append(homie.Node("analog_sens", "Analog Sensors", adcs))
 
-    device = homie.HomieDevice( mqtt, ubinascii.hexlify(network.WLAN().config('mac')), nodes, "Multicontroler{}".format(config["location"]), homie_broadcast_cb)
-
-    time_tmp = 0
-
     try:
+        #~ robust.MQTTClient.DEBUG = True
+
+        #create the mqtt client using config parameters
+        mqtt = robust.MQTTClient(config["client_id"], config["broker"], keepalive=homie.NAME_SEND_INTERVAL)
+
+        device = homie.HomieDevice( mqtt, ubinascii.hexlify(network.WLAN().config('mac')), nodes, "Multicontroler{}".format(config["location"]), homie_broadcast_cb)
+
+        time_tmp = 0
+
         while True:
             device.main()
             time.sleep(.050)
