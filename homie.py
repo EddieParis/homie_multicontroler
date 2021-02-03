@@ -7,9 +7,6 @@ KEEP_ALIVE = const(60)
 log = True
 
 
-
-publish_wait_queue = []
-
 class HomieDevice:
     base = "homie"
     BROADCAST = "$broadcast"
@@ -21,6 +18,7 @@ class HomieDevice:
         self.user_cb = None
         self.broadcast_cb = broadcast_cb
         self.mqtt.set_callback(self.subscribe_cb)
+        self.publish_wait_queue = []
 
         base_list = [self.base, device_id.decode("ascii"), "$state" ]
         self.state_topic = "/".join(base_list)
@@ -86,12 +84,12 @@ class HomieDevice:
 
     def main(self):
         self.mqtt.check_msg()
-        while len(publish_wait_queue):
-            prop, value = publish_wait_queue.pop()
+        while len(self.publish_wait_queue):
+            prop, value = self.publish_wait_queue.pop()
             prop.send_value(value)
         now = time.time()
         if now - self.last_message_epoc > KEEP_ALIVE:
-            self.publish(self.state_topic, "ready")
+            self.publish(self.state_topic, "ready", 0)
             self.last_message_epoc = now
 
 
@@ -169,7 +167,7 @@ class Property:
     def call_cb(self, topic_split, value):
         if topic_split[3] == self.property_id and self.value_set_cb:
             if self.value_set_cb(topic_split, value):
-                publish_wait_queue.append((self, value))
+                self.homie.publish_wait_queue.append((self, value))
             return True
         else:
             return False
