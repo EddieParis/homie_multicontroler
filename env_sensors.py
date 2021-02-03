@@ -19,12 +19,14 @@ class EnironmentNode(homie.Node):
 class EnvironmentDht(EnironmentNode):
     def __init__(self):
         super().__init__([self.get_temp_prop(), self.get_humid_prop()], None)
+        import dht
+        import machine
         self.dht_retry = 0
         self.dht_err_ctr = 0
         self.driver = temp_sensor = dht.DHT22(machine.Pin(0))
 
     def periodic(self, now):
-        if config["dht"] and (now % 60) == self.dht_retry :
+        if (now % 60) == self.dht_retry :
             try:
                 self.driver.measure()
             except (OSError, dht.DHTChecsumError) as excp:
