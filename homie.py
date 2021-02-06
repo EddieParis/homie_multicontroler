@@ -116,7 +116,7 @@ class Node:
     def action_set(self, topic_split, value):
         if topic_split[2] == self.node_id:
             for prop in self.properties:
-                if prop.call_cb(topic_split, value):
+                if prop.check_msg(topic_split, value):
                     return True
         return False
 
@@ -167,7 +167,7 @@ class Property:
         else:
             self.homie.publish(self.value_topic, value, 0, self.retained)
 
-    def call_cb(self, topic_split, value):
+    def check_msg(self, topic_split, value):
         if topic_split[3] == self.property_id and self.value_set_cb:
             if self.value_set_cb(topic_split, value):
                 self.send_value(value, True)
