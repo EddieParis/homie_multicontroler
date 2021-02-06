@@ -55,7 +55,7 @@ class ColorManager:
     def stop_cycling(self, deferred=False):
         if self.cycle:
             self.cycle = 0
-            self.props[1].send_value(str(0))
+            self.props[1].send_value(str(0), deferred)
 
     def set_cycler(self, topic, value):
         self.cycle = int(value)
