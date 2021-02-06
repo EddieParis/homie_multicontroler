@@ -161,13 +161,16 @@ class Property:
             return True
         return False
 
-    def send_value(self, value):
-        self.homie.publish(self.value_topic, value, 0, self.retained)
+    def send_value(self, value, deferred=False):
+        if deferred:
+            self.homie.publish_wait_queue.append((self, value))
+        else:
+            self.homie.publish(self.value_topic, value, 0, self.retained)
 
     def call_cb(self, topic_split, value):
         if topic_split[3] == self.property_id and self.value_set_cb:
             if self.value_set_cb(topic_split, value):
-                self.homie.publish_wait_queue.append((self, value))
+                self.send_value(value, True)
             return True
         else:
             return False
