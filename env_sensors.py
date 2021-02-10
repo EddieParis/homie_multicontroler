@@ -34,8 +34,9 @@ class EnvironmentDht(EnironmentNode):
                 self.dht_retry +=4
                 self.dht_err_ctr += 1
                 if self.dht_retry == 40:
-                    #too many retries, raise the original exception
-                    raise
+                    #too many retries
+                    self.properties[0].alert()
+                    self.dht_retry = 70 # stop retrying
                 else:
                     #logging
                     print("DHT error, retrying")
@@ -47,7 +48,7 @@ class EnvironmentDht(EnironmentNode):
                 print(self.driver.temperature())
 
                 #publish humidity
-                if (now % (60*30)) == self.dht_retry:
+                if (now % (60*10)) == self.dht_retry:
                     self.properties[1].send_value(str(self.driver.humidity()))
 
 class EnvironmentDS1820(EnironmentNode):
@@ -77,9 +78,13 @@ class EnvironmentBME280(EnironmentNode):
 
     def periodic(self, now):
         if (now % 60) == 0:
-            temp,pa,hum = self.driver.read_compensated_data()
-            self.properties[0].send_value('{:.1f}'.format(temp/100))
-            self.properties[1].send_value('{:.2f}'.format(pa/25600))
-            if self.driver.humidity_capable:
-                self.properties[2].send_value(str(hum//1024))
-            print (temp/100,pa//25600,hum/1024)
+            try:
+                temp,pa,hum = self.driver.read_compensated_data()
+            except OSError as excp:
+                self.properties[0].alert()
+            else:
+                self.properties[0].send_value('{:.1f}'.format(temp/100))
+                self.properties[1].send_value('{:.2f}'.format(pa/25600))
+                if self.driver.humidity_capable:
+                    self.properties[2].send_value(str(hum//1024))
+                print (temp/100,pa//25600,hum/1024)
