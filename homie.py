@@ -18,7 +18,6 @@ class HomieDevice:
         self.user_cb = None
         self.broadcast_cb = broadcast_cb
         self.mqtt.set_callback(self.subscribe_cb)
-        self.publish_wait_queue = []
 
         base_list = [self.base, device_id.decode("ascii"), "$state" ]
         self.state_topic = "/".join(base_list)
@@ -47,12 +46,16 @@ class HomieDevice:
             base_list[-1] = "+"
             base_list.append("+")
             base_list.append("set")
-            mqtt.subscribe("/".join(base_list))
+            mqtt.subscribe("/".join(base_list), 1)
+
+        time.sleep(1)
+        while(mqtt.check_msg()):
+            pass
 
         if broadcast_cb:
             mqtt.subscribe("/".join([self.base, self.BROADCAST, '#']), 1)
 
-        self.publish(self.state_topic, "ready")
+        self.ready()
 
     def set_user_cb(self, cb):
         self.user_cb = cb
@@ -80,17 +83,26 @@ class HomieDevice:
         if log:
             print(joint_topic, value)
         self.mqtt.publish(joint_topic, value, retained, qos)
+        self.last_message_epoc = time.time()
         return joint_topic
+
+    def alert(self):
+        self.state = "alert"
+        self.publish_state()
+
+    def ready(self):
+        self.state = "ready"
+        self.publish_state()
+
+    def publish_state(self):
+        self.publish(self.state_topic, self.state, 0)
+        self.last_message_epoc = time.time()
 
     def main(self):
         self.mqtt.check_msg()
-        while len(self.publish_wait_queue):
-            prop, value = self.publish_wait_queue.pop()
-            prop.send_value(value)
         now = time.time()
         if now - self.last_message_epoc > KEEP_ALIVE:
-            self.publish(self.state_topic, "ready", 0)
-            self.last_message_epoc = now
+            self.publish_state()
 
 
 class Node:
@@ -161,16 +173,16 @@ class Property:
             return True
         return False
 
-    def send_value(self, value, deferred=False):
-        if deferred:
-            self.homie.publish_wait_queue.append((self, value))
-        else:
-            self.homie.publish(self.value_topic, value, 0, self.retained)
+    def alert(self):
+        self.homie.alert()
+
+    def send_value(self, value):
+        self.homie.publish(self.value_topic, value, 1, self.retained)
 
     def check_msg(self, topic_split, value):
         if topic_split[3] == self.property_id and self.value_set_cb:
             if self.value_set_cb(topic_split, value):
-                self.send_value(value, True)
+                self.send_value(value)
             return True
         else:
             return False

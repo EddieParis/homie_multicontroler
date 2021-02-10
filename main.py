@@ -43,7 +43,7 @@ class ColorManager:
     def set_color(self, topic, value):
         for dimmer, val in zip(self.dimmers, value.split(",")):
             dimmer.pwm.duty(int(float(val)*1023/255))
-        self.stop_cycling(deferred=True)
+        self.stop_cycling()
         return True
 
     def do_cycle(self):
@@ -52,10 +52,10 @@ class ColorManager:
                 dimmer.pwm.duty(int(511*math.cos(angle)+511))
             self.angles = [ (angle + inc*self.cycle)%(math.pi*2) for angle, inc in zip(self.angles, self.increments) ]
 
-    def stop_cycling(self, deferred=False):
+    def stop_cycling(self):
         if self.cycle:
             self.cycle = 0
-            self.props[1].send_value(str(0), deferred)
+            self.props[1].send_value(str(0))
 
     def set_cycler(self, topic, value):
         self.cycle = int(value)
