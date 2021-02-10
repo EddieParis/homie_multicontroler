@@ -36,7 +36,7 @@ class ColorManager:
         self.dimmers = dimmers[:3]
         self.cycle = 0
         self.angles = [math.pi,math.pi,math.pi]
-        self.increments = [math.pi/180, math.pi/260, math.pi/225]
+        self.increments = [math.pi/180, math.pi/270, math.pi/225]
         for dimmer in self.dimmers:
             dimmer.cycler = self
 
