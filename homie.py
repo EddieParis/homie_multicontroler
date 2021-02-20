@@ -32,7 +32,6 @@ class HomieDevice:
 
         base_list[-1] = "$name"
         self.name_topic = self.publish(base_list, nice_device_name)
-        self.last_message_epoc = time.time()
 
         self.publish(self.state_topic, "init")
 
@@ -83,7 +82,6 @@ class HomieDevice:
         if log:
             print(joint_topic, value)
         self.mqtt.publish(joint_topic, value, retained, qos)
-        self.last_message_epoc = time.time()
         return joint_topic
 
     def alert(self):
@@ -95,13 +93,13 @@ class HomieDevice:
         self.publish_state()
 
     def publish_state(self):
-        self.publish(self.state_topic, self.state, 0)
-        self.last_message_epoc = time.time()
+        self.publish(self.state_topic, self.state, 1)
+        self.last_state_epoc = time.time()
 
     def main(self):
         self.mqtt.check_msg()
         now = time.time()
-        if now - self.last_message_epoc > KEEP_ALIVE:
+        if now - self.last_state_epoc > KEEP_ALIVE:
             self.publish_state()
 
 
