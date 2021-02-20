@@ -1,4 +1,4 @@
-# The homie led multicontroler #
+# The homie led multicontroler
 
 This is the [homie](https://homieiot.github.io) compatible led muticontroler project. This project is composed of a software and 2 hardware boards based on esp32 and cheaper esp8266 (to be published soon).
 
@@ -6,7 +6,10 @@ The goal of this project is to provide a multi channel led controller and sensor
 
 You don't have to be a python or an electronic expert to use this project.
 
-# Main features #
+![Hardware ESP32](doc/images/esp32.jpg)
+View of in situation ESP32 hardware
+
+# Main features
 - homie 3.0 and 4.0 compatible (seamless integration with openHAB for instance)
 - json configurable
 - controls independant 3 (esp8266) or 4 (esp32) leds channels or RGB group (12v and 24v compatible)
@@ -17,7 +20,7 @@ You don't have to be a python or an electronic expert to use this project.
 - designed to run on micropython
 - very robust, ran for several years now
 
-# Configuration #
+# Configuration
 You will have to provide a configuered json file to the controler, it will be use to determine which platform and which sensor you are using, and then expose the values on the homie side accordingly.
 
 * esp32: boolean (false), set to true if you are running an esp32 platform
