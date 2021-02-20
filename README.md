@@ -19,3 +19,13 @@ You don't have to be a python or an electronic expert to use this project.
 
 # Configuration #
 You will have to provide a configuered json file to the controler, it will be use to determine which platform and which sensor you are using, and then expose the values on the homie side accordingly.
+
+* esp32: boolean (false), set to true if you are running an esp32 platform
+* broker: string (empty), the ip of your MQTT broker
+* location: string (empty), this will be used in the displayed name of the item like "Multicontroler - <location>"
+* dht: boolean (false), set to true if you are using a DHT compatible temperature/humidity sensor 
+* ds1820: boolean (false), set to true if you are using a ds1820 temeprature sensor
+* bme280: boolean (false), set to true if you are using a bme or bmp 280 sensor, the software can recognize itself bme vs bmp
+* analog_period: int (0), interval in seconds of analog sampling and publishing
+* analog_bits: int (10) - esp32 only, precision for the analog conversion
+* analog_attn: int (0) - esp32 only, attenuation for ADC
