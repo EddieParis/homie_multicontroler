@@ -20,6 +20,9 @@ View of in situation ESP32 hardware
 - designed to run on micropython
 - very robust, ran for several years now
 
+# Why this project
+The original idea comes from the desire to control lightning at home. I wanted something cheap and simple to use. I needed no more, this project was born. I initially made a project with lamps connected on mains power and communicating over 433 RF, worked not very well (433 Mhz band is really busy) and dangerous. When I dicovered the ESP8266 boards and micropython I immediatly knew I had to use them. Over the years I embraced standards like MQTT and homie (influenced by OpenHab2). I faced connectivity shortage on ESP8266 and ESP32 saved me :-) Now the project is mature enough to be published.
+
 # Configuration
 You will have to provide a configuered json file to the controler, it will be use to determine which platform and which sensor you are using, and then expose the values on the homie side accordingly.
 
