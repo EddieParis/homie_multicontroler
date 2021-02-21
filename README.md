@@ -56,12 +56,12 @@ The software is made to run on my hardware, but it can be used on any similar ha
 
 (more detailed steps to be done)
 
-1 flash micropython binary
-2 configure the wifi access
-3 upload the software
-4 upload umqqt simple and robust from micropython_lib
-5 upload the config.json
-6 reboot
-7 that's it
+1. flash micropython binary
+1. configure the wifi access
+1. upload the software
+1. upload umqqt simple and robust from micropython_lib
+1. upload the config.json
+1. reboot
+1. that's it
 
 I will publish a basic tutorial for usage on OpenHAB 2
