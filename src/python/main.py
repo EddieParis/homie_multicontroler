@@ -65,7 +65,7 @@ class ColorManager:
 class Dimmer(homie.Property):
 
     def __init__(self, dim_id, pwm, bt_pin):
-        super(Dimmer, self).__init__("chan_"+dim_id.lower(), "Dimmer "+dim_id.upper(), "float", "%", "0:100", 0, self.set_value)
+        super(Dimmer, self).__init__("chan-"+dim_id.lower(), "Dimmer "+dim_id.upper(), "float", "%", "0:100", 0, self.set_value)
         self.pwm = pwm
         self.button = Pin(bt_pin, Pin.IN, Pin.PULL_UP)
         self.time_cnt = 0
