@@ -1,4 +1,5 @@
 import homie
+import dht
 
 class EnironmentNode(homie.Node):
     def __init__(self, props, num):
@@ -17,19 +18,17 @@ class EnironmentNode(homie.Node):
         return homie.Property("pressure", "Atmospheric pressure", "float", "mBar", None, 0)
 
 class EnvironmentDht(EnironmentNode):
-    def __init__(self):
+    def __init__(self, pin):
         super().__init__([self.get_temp_prop(), self.get_humid_prop()], None)
-        import dht
-        import machine
         self.dht_retry = 0
         self.dht_err_ctr = 0
-        self.driver = temp_sensor = dht.DHT22(machine.Pin(0))
+        self.driver = temp_sensor = dht.DHT22(pin, irq_block = False)
 
     def periodic(self, now):
         if (now % 60) == self.dht_retry :
             try:
                 self.driver.measure()
-            except (OSError, dht.DHTChecsumError) as excp:
+            except (OSError, dht.DHTChecksumError) as excp:
                 #If we have an exception, retry in 4 seconds
                 self.dht_retry +=4
                 self.dht_err_ctr += 1

@@ -164,7 +164,7 @@ def main_loop():
 
         #create dht if it is enabled in config
         if config["dht"]:
-            env_nodes = [env_sensors.EnvironmentDht()]
+            env_nodes = [env_sensors.EnvironmentDht(Pin(0))]
         elif config["ds1820"]:
             import onewire, ds18x20
             ds_driver = ds18x20.DS18X20(onewire.OneWire(Pin(0)))
