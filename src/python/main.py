@@ -132,8 +132,9 @@ class Analog(homie.Property):
 
     def periodic(self, cur_time):
         if (cur_time % self.period) == 0:
-            print(self.adc.read())
-            self.send_value(str(self.max*self.adc.read()/self.range))
+            value = self.adc.read()
+            print(value)
+            self.send_value(str(self.max*value/self.range))
 
 def homie_broadcast_cb(topic, value, retained):
     print("broadcast :", topic, value, retained)
