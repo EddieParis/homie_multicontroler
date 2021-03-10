@@ -75,10 +75,10 @@ tools/webrepl/webrepl_cli.py -p <your webrepl password> boot.py <your-ip>:
 do not forget the column sign ':' at the end of the line.
 
 do the same for
+
 * main.py
 * homie.py
 * env_sensors.py
-
 * robust.py
 * simple.py
 
