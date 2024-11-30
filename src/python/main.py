@@ -69,7 +69,7 @@ class Dimmer(homie.Property):
         self.pwm = pwm
         self.button = Pin(bt_pin, Pin.IN, Pin.PULL_UP)
         self.time_cnt = 0
-        self.last_value = 0
+        self.last_value = 1023
         self.delta = 25
         self.top_pause = 0
         self.cycler = None
